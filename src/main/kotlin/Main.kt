@@ -1,11 +1,10 @@
 import androidx.compose.desktop.ui.tooling.preview.Preview
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.TooltipArea
-import androidx.compose.foundation.background
+import androidx.compose.foundation.*
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.window.WindowDraggableArea
 import androidx.compose.material.*
 import androidx.compose.material.icons.Icons
@@ -18,6 +17,9 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.ExperimentalTextApi
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.*
@@ -26,7 +28,7 @@ import model.RuntimeExposablePort
 import java.awt.Desktop
 import java.net.URI
 
-@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterialApi::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterialApi::class, ExperimentalTextApi::class)
 @Composable
 @Preview
 fun App() {
@@ -131,7 +133,46 @@ fun App() {
         }
 
         Column(modifier = Modifier.fillMaxHeight().weight(0.6f)) {
+            Row(modifier = Modifier.weight(0.7f)) {
 
+            }
+
+            Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
+                Divider(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(1.dp)
+                )
+            }
+
+            Row(modifier = Modifier.weight(0.3f).padding(8.dp).border(1.dp, Color(0x29, 0x29, 0x29), shape = MaterialTheme.shapes.small)) {
+                Box(modifier = Modifier.fillMaxSize().background(Color(0x17, 0x17, 0x17))) {
+                    BasicTextField(value = """
+                            2024/06/28 01:00:53 [I] [root.go:139] start frpc service for config file [C:\_public\frp_0.52.3_windows_amd64\frpc.toml]
+                            2024/06/28 01:00:53 [I] [service.go:299] [d1eb514d62903016] login to server success, get run id [d1eb514d62903016]
+                            2024/06/28 01:00:53 [I] [proxy_manager.go:156] [d1eb514d62903016] proxy added: [http-broadcastbot]
+                            2024/06/28 01:00:53 [I] [control.go:173] [d1eb514d62903016] [http-broadcastbot] start proxy success
+                        """.trimIndent(),
+                        onValueChange = {},
+                        readOnly = true,
+                        textStyle = TextStyle(
+                            fontFamily = FontFamily("JetBrains Mono"),
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colors.onBackground,
+                        ),
+//                colors = TextFieldDefaults.textFieldColors(
+//                    backgroundColor = Color(0x17, 0x17, 0x17),
+//                    focusedIndicatorColor = Color.Transparent,
+//                    unfocusedIndicatorColor = Color.Transparent,
+//                    disabledIndicatorColor = Color.Transparent
+//                ),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 10.dp, vertical = 4.dp) //TODO fix the paddings
+//                shape = MaterialTheme.shapes.small,
+                    )
+                }
+            }
         }
     }
 
