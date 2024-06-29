@@ -2,7 +2,7 @@ package model
 
 import java.util.*
 
-data class ExposablePort(
+data class ExposableApp(
     var id: UUID = UUID.randomUUID(),
     var protocol: String = "",
     var localAddress: String = "",

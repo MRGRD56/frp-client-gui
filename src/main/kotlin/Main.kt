@@ -10,7 +10,9 @@ import androidx.compose.material.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.*
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
@@ -23,7 +25,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.*
-import model.ExposablePort
+import model.ExposableApp
 import model.RuntimeExposablePort
 import java.awt.Desktop
 import java.net.URI
@@ -35,7 +37,7 @@ fun App() {
     val exposablePorts = remember {
         mutableStateListOf<RuntimeExposablePort>(
             RuntimeExposablePort(
-                ExposablePort(
+                ExposableApp(
                     protocol = "HTTP",
                     localAddress = "127.0.0.1",
                     localPort = 8521,
@@ -43,7 +45,7 @@ fun App() {
                     name = "http-myfirstapp"
                 )
             ), RuntimeExposablePort(
-                ExposablePort(
+                ExposableApp(
                     protocol = "HTTP",
                     localAddress = "192.168.0.125",
                     localPort = 80,
@@ -52,7 +54,7 @@ fun App() {
                     isCustomName = true
                 )
             ), RuntimeExposablePort(
-                ExposablePort(
+                ExposableApp(
                     protocol = "TCP",
                     localAddress = "127.0.0.1",
                     localPort = 9189,
@@ -64,7 +66,10 @@ fun App() {
     }
 
     Row(modifier = Modifier.fillMaxSize()) {
-        Column(modifier = Modifier.fillMaxHeight().widthIn(max = 350.dp).padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Column(
+            modifier = Modifier.fillMaxHeight().widthIn(max = 350.dp).padding(8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
             exposablePorts.forEachIndexed { index, exposablePort ->
                 Card(modifier = Modifier.fillMaxWidth(), onClick = {
 
@@ -72,8 +77,18 @@ fun App() {
                     Row(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(12.dp, 8.dp).weight(1f)) {
                             Row {
-                                Text(exposablePort.app.protocol, style = MaterialTheme.typography.h6, color = MaterialTheme.colors.primary, modifier = Modifier.padding(start = 6.dp, top = 4.dp, end = 5.dp, bottom = 4.dp))
-                                Text(exposablePort.app.formatShortLocalSocket() ?: "", style = MaterialTheme.typography.h6, color = MaterialTheme.colors.primaryVariant, modifier = Modifier.padding(start = 5.dp, top = 4.dp, end = 6.dp, bottom = 4.dp))
+                                Text(
+                                    exposablePort.app.protocol,
+                                    style = MaterialTheme.typography.h6,
+                                    color = MaterialTheme.colors.primary,
+                                    modifier = Modifier.padding(start = 6.dp, top = 4.dp, end = 5.dp, bottom = 4.dp)
+                                )
+                                Text(
+                                    exposablePort.app.formatShortLocalSocket() ?: "",
+                                    style = MaterialTheme.typography.h6,
+                                    color = MaterialTheme.colors.primaryVariant,
+                                    modifier = Modifier.padding(start = 5.dp, top = 4.dp, end = 6.dp, bottom = 4.dp)
+                                )
                             }
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 TooltipArea(
@@ -89,20 +104,42 @@ fun App() {
                                         }
                                     }
                                 ) {
-                                    if (exposablePort.isRunning)
-                                        Text(exposablePort.app.name, modifier = Modifier.padding(start = 6.dp, top = 4.dp, end = 10.dp, bottom = 4.dp), color = Color(0x43, 0xa0, 0x47))
+                                    if (exposablePort.isRunning.value)
+                                        Text(
+                                            exposablePort.app.name,
+                                            modifier = Modifier.padding(
+                                                start = 6.dp,
+                                                top = 4.dp,
+                                                end = 10.dp,
+                                                bottom = 4.dp
+                                            ),
+                                            color = Color(0x43, 0xa0, 0x47)
+                                        )
                                     else
-                                        Text(exposablePort.app.name, modifier = Modifier.padding(start = 6.dp, top = 4.dp, end = 10.dp, bottom = 4.dp))
+                                        Text(
+                                            exposablePort.app.name,
+                                            modifier = Modifier.padding(
+                                                start = 6.dp,
+                                                top = 4.dp,
+                                                end = 10.dp,
+                                                bottom = 4.dp
+                                            )
+                                        )
                                 }
                                 IconButton(
                                     onClick = {
-                                        Desktop.getDesktop().browse(URI(exposablePort.app.getFullUrl("tun.kiriru.su", "https")))
+                                        Desktop.getDesktop()
+                                            .browse(URI(exposablePort.app.getFullUrl("tun.kiriru.su", "https")))
                                     },
                                     modifier = Modifier.size(18.dp),
-                                    enabled = exposablePort.isRunning
+                                    enabled = exposablePort.isRunning.value
                                 ) {
-                                    if (exposablePort.isRunning)
-                                        Icon(Icons.AutoMirrored.Filled.OpenInNew, "Open in browser", tint = Color(0x43, 0xa0, 0x47))
+                                    if (exposablePort.isRunning.value)
+                                        Icon(
+                                            Icons.AutoMirrored.Filled.OpenInNew,
+                                            "Open in browser",
+                                            tint = Color(0x43, 0xa0, 0x47)
+                                        )
                                     else
                                         Icon(Icons.AutoMirrored.Filled.OpenInNew, "Open in browser")
                                 }
@@ -110,9 +147,9 @@ fun App() {
                         }
                         Column(Modifier.padding(end = 2.dp, top = 2.dp)) {
                             IconButton(onClick = {
-                                exposablePorts[index] = exposablePort.copy(isRunning = !exposablePort.isRunning)
+                                exposablePort.isRunning.value = !exposablePort.isRunning.value
                             }) {
-                                if (exposablePort.isRunning) {
+                                if (exposablePort.isRunning.value) {
                                     Icon(Icons.Filled.Stop, "Stop")
                                 } else {
                                     Icon(Icons.Filled.PlayArrow, "Start")
@@ -145,9 +182,13 @@ fun App() {
                 )
             }
 
-            Row(modifier = Modifier.weight(0.3f).padding(8.dp).border(1.dp, Color(0x29, 0x29, 0x29), shape = MaterialTheme.shapes.small)) {
+            Row(
+                modifier = Modifier.weight(0.3f).padding(8.dp)
+                    .border(1.dp, Color(0x29, 0x29, 0x29), shape = MaterialTheme.shapes.small)
+            ) {
                 Box(modifier = Modifier.fillMaxSize().background(Color(0x17, 0x17, 0x17))) {
-                    BasicTextField(value = """
+                    BasicTextField(
+                        value = """
                             2024/06/28 01:00:53 [I] [root.go:139] start frpc service for config file [C:\_public\frp_0.52.3_windows_amd64\frpc.toml]
                             2024/06/28 01:00:53 [I] [service.go:299] [d1eb514d62903016] login to server success, get run id [d1eb514d62903016]
                             2024/06/28 01:00:53 [I] [proxy_manager.go:156] [d1eb514d62903016] proxy added: [http-broadcastbot]
@@ -171,6 +212,7 @@ fun App() {
                             .padding(horizontal = 10.dp, vertical = 4.dp) //TODO fix the paddings
 //                shape = MaterialTheme.shapes.small,
                     )
+//                    VerticalScrollbar(adapter = rememberScrollbarAdapter(rememberScrollState(0)))
                 }
             }
         }
@@ -218,18 +260,29 @@ fun main() = application {
                                             .pointerInput(interactionSource) {
                                                 detectTapGestures(
                                                     onDoubleTap = {
-                                                        windowState.placement = if (windowState.placement == WindowPlacement.Maximized)
-                                                            WindowPlacement.Floating else WindowPlacement.Maximized
+                                                        windowState.placement =
+                                                            if (windowState.placement == WindowPlacement.Maximized)
+                                                                WindowPlacement.Floating else WindowPlacement.Maximized
                                                     }
                                                 )
                                             },
                                     ) {
-                                        Text("FRP Client GUI", fontSize = 13.sp, modifier = Modifier.padding(start = 12.dp).offset(y = 1.dp))
+                                        Text(
+                                            "FRP Client GUI",
+                                            fontSize = 13.sp,
+                                            modifier = Modifier.padding(start = 12.dp).offset(y = 1.dp)
+                                        )
                                     }
                                 }
 
-                                Row(horizontalArrangement = Arrangement.Start, modifier = Modifier.wrapContentWidth().fillMaxHeight()) {
-                                    Column(verticalArrangement = Arrangement.Center, modifier = Modifier.fillMaxHeight()) {
+                                Row(
+                                    horizontalArrangement = Arrangement.Start,
+                                    modifier = Modifier.wrapContentWidth().fillMaxHeight()
+                                ) {
+                                    Column(
+                                        verticalArrangement = Arrangement.Center,
+                                        modifier = Modifier.fillMaxHeight()
+                                    ) {
                                         IconButton(
                                             onClick = {
                                                 windowState.isMinimized = true
@@ -267,8 +320,9 @@ fun main() = application {
 
                                     TextButton(
                                         onClick = {
-                                            windowState.placement = if (windowState.placement == WindowPlacement.Maximized)
-                                                WindowPlacement.Floating else WindowPlacement.Maximized
+                                            windowState.placement =
+                                                if (windowState.placement == WindowPlacement.Maximized)
+                                                    WindowPlacement.Floating else WindowPlacement.Maximized
                                         },
                                         modifier = Modifier.width(47.dp),
                                         colors = ButtonDefaults.textButtonColors(
