@@ -1,3 +1,4 @@
+import org.gradle.kotlin.dsl.support.kotlinCompilerOptions
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 
 plugins {
@@ -22,6 +23,14 @@ dependencies {
     // With compose.desktop.common you will also lose @Preview functionality
     implementation(compose.desktop.currentOs)
     implementation(compose.materialIconsExtended)
+
+    implementation("org.jetbrains.kotlin:kotlin-stdlib")
+    implementation("org.jetbrains.exposed:exposed-core:0.52.0")
+    implementation("org.jetbrains.exposed:exposed-dao:0.52.0")
+    implementation("org.jetbrains.exposed:exposed-jdbc:0.52.0")
+    implementation("org.jetbrains.exposed:exposed-java-time:0.52.0")
+    implementation("org.xerial:sqlite-jdbc:3.46.0.0")
+    implementation("org.jetbrains.kotlin", "kotlin-reflect", "2.0.0")
 }
 
 compose.desktop {
@@ -29,9 +38,15 @@ compose.desktop {
         mainClass = "MainKt"
 
         nativeDistributions {
-            targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
+            targetFormats(TargetFormat.Msi, TargetFormat.Deb)
             packageName = "frp-client-gui"
             packageVersion = "1.0.0"
         }
+    }
+}
+
+tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
+    kotlinOptions {
+        freeCompilerArgs = freeCompilerArgs + "-Xcontext-receivers"
     }
 }

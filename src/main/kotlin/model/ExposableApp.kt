@@ -3,27 +3,59 @@ package model
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
+import entity.ExposableAppEntity
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.debounce
 import util.convertKebabCaseToTitleCase
 import java.util.*
 
+private const val LOOPBACK_ADDRESS = "127.0.0.1"
+
 class ExposableApp(
     val id: UUID = UUID.randomUUID(),
-    protocol: String = "",
-    localAddress: String = "",
-    localPort: Int? = null,
+    protocol: String = "HTTP",
+    localAddress: String = LOOPBACK_ADDRESS,
+    localPort: UShort? = null,
     subdomain: String = "",
     name: String = "",
-    isCustomName: Boolean = false
+    isCustomName: Boolean = false,
+    extraConfig: String = ""
 ) {
+    private var observationJob: Job? = null
+
     var protocol by mutableStateOf(protocol)
     var localAddress by mutableStateOf(localAddress)
     var localPort by mutableStateOf(localPort)
     var subdomain by mutableStateOf(subdomain)
     var name by mutableStateOf(name)
     var isCustomName by mutableStateOf(isCustomName)
+    var extraConfig by mutableStateOf(extraConfig)
+
+    @OptIn(FlowPreview::class)
+    fun observeChanges(onChange: (ExposableApp) -> Unit) {
+        stopObservingChanges()
+
+        observationJob = CoroutineScope(Dispatchers.IO).launch {
+            snapshotFlow {
+                listOf(protocol, localAddress, localPort, subdomain, name, isCustomName, extraConfig)
+            }
+                .debounce(1000)
+                .collect {
+                    onChange(this@ExposableApp)
+                }
+        }
+    }
+
+    fun stopObservingChanges() {
+        if (observationJob != null) {
+            observationJob?.cancel()
+            observationJob = null
+        }
+    }
 
     fun hasDefaultAddress(): Boolean =
-        localAddress.isBlank() || localAddress == "127.0.0.1"
+        localAddress.isBlank() || localAddress == LOOPBACK_ADDRESS
 
     fun formatShortLocalSocket(): String? {
         val port = localPort ?: return null
@@ -61,5 +93,18 @@ class ExposableApp(
 
     override fun hashCode(): Int {
         return id.hashCode()
+    }
+
+    companion object {
+        fun fromEntity(entity: ExposableAppEntity) = ExposableApp(
+            id = entity.id.value,
+            protocol = entity.protocol,
+            localAddress = entity.localAddress,
+            localPort = entity.localPort,
+            subdomain = entity.subdomain,
+            name = entity.name,
+            isCustomName = entity.isCustomName,
+            extraConfig = entity.extraConfig
+        )
     }
 }

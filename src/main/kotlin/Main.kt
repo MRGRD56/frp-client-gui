@@ -1,188 +1,256 @@
 import androidx.compose.desktop.ui.tooling.preview.Preview
-import androidx.compose.foundation.*
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.TooltipArea
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.window.WindowDraggableArea
 import androidx.compose.material.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.RectangleShape
-import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.text.ExperimentalTextApi
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.*
-import component.common.SmallIconButton
+import androidx.compose.ui.window.Window
+import androidx.compose.ui.window.WindowPosition
+import androidx.compose.ui.window.application
+import androidx.compose.ui.window.rememberWindowState
+import component.ExposedAppLogs
+import component.window.WindowTitle
+import entity.ExposableAppEntity
 import frp.Frp
 import model.ExposableApp
 import model.RuntimeExposablePort
 import modifier.border
+import org.jetbrains.exposed.sql.Database
+import org.jetbrains.exposed.sql.SchemaUtils
+import org.jetbrains.exposed.sql.transactions.transaction
+import table.ExposableApps
 import java.awt.Desktop
 import java.net.URI
+
+fun handleAppChange(app: ExposableApp) {
+    transaction {
+        ExposableAppEntity.findByIdAndUpdate(app.id, ExposableAppEntity.fromDto(app))
+    }
+}
 
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterialApi::class, ExperimentalTextApi::class)
 @Composable
 @Preview
 fun App() {
     val exposablePorts = remember {
-        mutableStateListOf<RuntimeExposablePort>(
-            RuntimeExposablePort(
-                ExposableApp(
-                    protocol = "HTTP",
-                    localAddress = "127.0.0.1",
-                    localPort = 8521,
-                    subdomain = "myfirstapp",
-                    name = "http-myfirstapp"
-                )
-            ), RuntimeExposablePort(
-                ExposableApp(
-                    protocol = "HTTP",
-                    localAddress = "192.168.0.125",
-                    localPort = 80,
-                    subdomain = "backend",
-                    name = "My Backend",
-                    isCustomName = true
-                )
-            ), RuntimeExposablePort(
-                ExposableApp(
-                    protocol = "TCP",
-                    localAddress = "127.0.0.1",
-                    localPort = 9189,
-                    subdomain = "somethingidk",
-                    name = "tcp-somethingidk"
-                )
-            )
-        )
+        mutableStateListOf<RuntimeExposablePort>()
     }
 
     var selectedExposablePort by remember { mutableStateOf<RuntimeExposablePort?>(null) }
+
+    var isLoaded by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        Database.connect("jdbc:sqlite:frpc_gui.db", driver = "org.sqlite.JDBC")
+
+        transaction {
+            SchemaUtils.create(
+                ExposableApps
+            )
+
+            ExposableAppEntity.all().forEach {
+                val app = ExposableApp.fromEntity(it)
+                app.observeChanges(::handleAppChange)
+                exposablePorts.add(
+                    RuntimeExposablePort(app)
+                )
+            }
+
+            isLoaded = true
+        }
+    }
+
+//    val exposablePorts = remember {
+//        mutableStateListOf<RuntimeExposablePort>(
+//            RuntimeExposablePort(
+//                ExposableApp(
+//                    protocol = "HTTP",
+//                    localAddress = "127.0.0.1",
+//                    localPort = 8521u,
+//                    subdomain = "my-first-app",
+//                    name = "My First App"
+//                )
+//            ), RuntimeExposablePort(
+//                ExposableApp(
+//                    protocol = "HTTP",
+//                    localAddress = "192.168.0.125",
+//                    localPort = 80u,
+//                    subdomain = "backend",
+//                    name = "My Backend",
+//                    isCustomName = true
+//                )
+//            ), RuntimeExposablePort(
+//                ExposableApp(
+//                    protocol = "TCP",
+//                    localAddress = "127.0.0.1",
+//                    localPort = 9189u,
+//                    subdomain = "something-idk",
+//                    name = "Something Idk"
+//                )
+//            )
+//        )
+//    }
+
+    if (!isLoaded) {
+        return
+    }
 
     Row(
         modifier = Modifier.fillMaxSize()
             .border(color = Color(0x28, 0x28, 0x28), start = 2.dp, bottom = 2.dp, end = 2.dp)
     ) {
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxHeight()
-                .padding(8.dp)
-                .let {
-                    if (selectedExposablePort == null) {
-                        it
-                    } else {
-                        it.widthIn(max = 350.dp)
-                    }
-                }
-            ,
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            exposablePorts.forEachIndexed { index, exposablePort ->
-                val isSelected = selectedExposablePort == exposablePort
+                .run {
+                    selectedExposablePort ?: return@run this
 
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    onClick = {
-                        selectedExposablePort = if (isSelected) null else exposablePort
-                    },
-                    backgroundColor = if (isSelected) Color(0x27, 0x27, 0x27) else MaterialTheme.colors.surface
-                ) {
-                    Row(Modifier.fillMaxWidth()) {
-                        Column(Modifier.padding(12.dp, 8.dp).weight(1f)) {
-                            Row {
-                                Text(
-                                    exposablePort.app.protocol,
-                                    style = MaterialTheme.typography.h6,
-                                    color = MaterialTheme.colors.primary,
-                                    modifier = Modifier.padding(start = 6.dp, top = 4.dp, end = 5.dp, bottom = 4.dp)
-                                )
-                                Text(
-                                    exposablePort.app.formatShortLocalSocket() ?: "",
-                                    style = MaterialTheme.typography.h6,
-                                    color = MaterialTheme.colors.primaryVariant,
-                                    modifier = Modifier.padding(start = 5.dp, top = 4.dp, end = 6.dp, bottom = 4.dp)
-                                )
-                            }
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                TooltipArea(
-                                    tooltip = {
-                                        Surface(
-                                            modifier = Modifier.shadow(4.dp),
-                                            shape = RoundedCornerShape(4.dp)
-                                        ) {
-                                            Text(
-                                                text = exposablePort.app.getFullDomain("tun.kiriru.su") ?: "",
-                                                modifier = Modifier.padding(10.dp)
-                                            )
+                    widthIn(max = 350.dp)
+                }
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .padding(8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                exposablePorts.forEachIndexed { index, exposablePort ->
+                    val isSelected = selectedExposablePort == exposablePort
+
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = {
+                            selectedExposablePort = if (isSelected) null else exposablePort
+                        },
+                        backgroundColor = if (isSelected) Color(0x27, 0x27, 0x27) else MaterialTheme.colors.surface
+                    ) {
+                        Row(Modifier.fillMaxWidth()) {
+                            Column(Modifier.padding(12.dp, 8.dp).weight(1f)) {
+                                Row {
+                                    Text(
+                                        exposablePort.app.protocol,
+                                        style = MaterialTheme.typography.h6,
+                                        color = MaterialTheme.colors.primary,
+                                        modifier = Modifier.padding(start = 6.dp, top = 4.dp, end = 5.dp, bottom = 4.dp)
+                                    )
+                                    Text(
+                                        exposablePort.app.formatShortLocalSocket() ?: "",
+                                        style = MaterialTheme.typography.h6,
+                                        color = MaterialTheme.colors.primaryVariant,
+                                        modifier = Modifier.padding(start = 5.dp, top = 4.dp, end = 6.dp, bottom = 4.dp)
+                                    )
+                                }
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    TooltipArea(
+                                        tooltip = {
+                                            Surface(
+                                                modifier = Modifier.shadow(4.dp),
+                                                shape = RoundedCornerShape(4.dp)
+                                            ) {
+                                                Text(
+                                                    text = exposablePort.app.getFullDomain("tun.kiriru.su") ?: "",
+                                                    modifier = Modifier.padding(10.dp)
+                                                )
+                                            }
                                         }
-                                    }
-                                ) {
-                                    if (exposablePort.isRunning)
-                                        Text(
-                                            exposablePort.app.name,
-                                            modifier = Modifier.padding(
-                                                start = 6.dp,
-                                                top = 4.dp,
-                                                end = 10.dp,
-                                                bottom = 4.dp
-                                            ),
-                                            color = Color(0x43, 0xa0, 0x47)
-                                        )
-                                    else
-                                        Text(
-                                            exposablePort.app.name,
-                                            modifier = Modifier.padding(
-                                                start = 6.dp,
-                                                top = 4.dp,
-                                                end = 10.dp,
-                                                bottom = 4.dp
+                                    ) {
+                                        if (exposablePort.isRunning)
+                                            Text(
+                                                exposablePort.app.name,
+                                                modifier = Modifier.padding(
+                                                    start = 6.dp,
+                                                    top = 4.dp,
+                                                    end = 10.dp,
+                                                    bottom = 4.dp
+                                                ),
+                                                color = Color(0x43, 0xa0, 0x47)
                                             )
-                                        )
-                                }
-                                IconButton(
-                                    onClick = {
-                                        Desktop.getDesktop()
-                                            .browse(URI(exposablePort.app.getFullUrl("tun.kiriru.su", "https")))
-                                    },
-                                    modifier = Modifier.size(18.dp),
-                                    enabled = exposablePort.isRunning
-                                ) {
-                                    if (exposablePort.isRunning)
-                                        Icon(
-                                            Icons.AutoMirrored.Filled.OpenInNew,
-                                            "Open in browser",
-                                            tint = Color(0x43, 0xa0, 0x47)
-                                        )
-                                    else
-                                        Icon(Icons.AutoMirrored.Filled.OpenInNew, "Open in browser")
+                                        else
+                                            Text(
+                                                exposablePort.app.name,
+                                                modifier = Modifier.padding(
+                                                    start = 6.dp,
+                                                    top = 4.dp,
+                                                    end = 10.dp,
+                                                    bottom = 4.dp
+                                                )
+                                            )
+                                    }
+                                    IconButton(
+                                        onClick = {
+                                            Desktop.getDesktop()
+                                                .browse(URI(exposablePort.app.getFullUrl("tun.kiriru.su", "https")))
+                                        },
+                                        modifier = Modifier.size(18.dp),
+                                        enabled = exposablePort.isRunning
+                                    ) {
+                                        if (exposablePort.isRunning)
+                                            Icon(
+                                                Icons.AutoMirrored.Filled.OpenInNew,
+                                                "Open in browser",
+                                                tint = Color(0x43, 0xa0, 0x47)
+                                            )
+                                        else
+                                            Icon(Icons.AutoMirrored.Filled.OpenInNew, "Open in browser")
+                                    }
                                 }
                             }
-                        }
-                        Column(Modifier.padding(end = 2.dp, top = 2.dp)) {
-                            IconButton(onClick = {
-                                exposablePort.isRunning = !exposablePort.isRunning
-                            }) {
-                                if (exposablePort.isRunning) {
-                                    Icon(Icons.Filled.Stop, "Stop")
-                                } else {
-                                    Icon(Icons.Filled.PlayArrow, "Start")
+                            Column(Modifier.padding(end = 2.dp, top = 2.dp)) {
+                                IconButton(onClick = {
+                                    exposablePort.isRunning = !exposablePort.isRunning
+                                }) {
+                                    if (exposablePort.isRunning) {
+                                        Icon(Icons.Filled.Stop, "Stop")
+                                    } else {
+                                        Icon(Icons.Filled.PlayArrow, "Start")
+                                    }
                                 }
                             }
                         }
                     }
                 }
             }
+
+            ExtendedFloatingActionButton(
+                modifier = Modifier.layout { measurable, constraints ->
+                    val placeable = measurable.measure(constraints)
+                    layout(placeable.width, placeable.height) {
+                        placeable.placeRelative(IntOffset(constraints.maxWidth - placeable.width - 24, constraints.maxHeight - placeable.height - 24))
+                    }
+                },
+                onClick = {
+                    val newApp = ExposableApp()
+
+                    transaction {
+                        ExposableAppEntity.new(ExposableAppEntity.fromDto(newApp))
+                    }
+
+                    newApp.observeChanges(::handleAppChange)
+
+                    val newRuntimeApp = RuntimeExposablePort(newApp)
+                    exposablePorts.add(newRuntimeApp)
+                    selectedExposablePort = newRuntimeApp
+                },
+                icon = { Icon(Icons.Filled.Add, "Add a new app") },
+                text = { Text(text = "Add new app") },
+            )
         }
 
         selectedExposablePort?.let { currentApp ->
@@ -266,7 +334,7 @@ fun App() {
                                         return@TextField
                                     }
 
-                                    currentApp.app.localPort = it.toIntOrNull() ?: currentApp.app.localPort
+                                    currentApp.app.localPort = it.toUShortOrNull() ?: currentApp.app.localPort
                                 },
                                 label = { Text("Local Port") }
                             )
@@ -300,39 +368,7 @@ fun App() {
                         modifier = Modifier.weight(0.3f).padding(top = 8.dp)
                             .border(1.dp, Color(0x29, 0x29, 0x29), shape = MaterialTheme.shapes.small)
                     ) {
-                        Box(modifier = Modifier.fillMaxSize().background(Color(0x17, 0x17, 0x17))) {
-                            BasicTextField(
-                                value = """
-                            2024/06/28 01:00:53 [I] [root.go:139] start frpc service for config file [C:\_public\frp_0.52.3_windows_amd64\frpc.toml]
-                            2024/06/28 01:00:53 [I] [service.go:299] [d1eb514d62903016] login to server success, get run id [d1eb514d62903016]
-                            2024/06/28 01:00:53 [I] [proxy_manager.go:156] [d1eb514d62903016] proxy added: [http-broadcastbot]
-                            2024/06/28 01:00:53 [I] [control.go:173] [d1eb514d62903016] [http-broadcastbot] start proxy success
-                        """.trimIndent(),
-                                onValueChange = {},
-                                readOnly = true,
-                                textStyle = TextStyle(
-                                    fontFamily = FontFamily("JetBrains Mono"),
-                                    fontSize = 11.sp,
-                                    color = MaterialTheme.colors.onBackground,
-                                ),
-//                colors = TextFieldDefaults.textFieldColors(
-//                    backgroundColor = Color(0x17, 0x17, 0x17),
-//                    focusedIndicatorColor = Color.Transparent,
-//                    unfocusedIndicatorColor = Color.Transparent,
-//                    disabledIndicatorColor = Color.Transparent
-//                ),
-                                modifier = Modifier
-                                    .fillMaxSize(), //TODO fix the paddings
-                                decorationBox = { innerTextField ->
-                                    Box(modifier = Modifier.fillMaxSize().padding(horizontal = 10.dp, vertical = 4.dp)) {
-                                        innerTextField()
-                                    }
-//                            VerticalScrollbar(adapter = rememberScrollbarAdapter(rememberScrollState(0)))
-                                }
-//                shape = MaterialTheme.shapes.small,
-                            )
-//                    VerticalScrollbar(adapter = rememberScrollbarAdapter(rememberScrollState(0)))
-                        }
+                        ExposedAppLogs()
                     }
                 }
             }
@@ -355,8 +391,6 @@ fun main() = application {
         height = 700.dp
     )
 
-    val interactionSource = remember { MutableInteractionSource() }
-
     Window(
         onCloseRequest = ::exitApplication,
         undecorated = true,
@@ -374,102 +408,7 @@ fun main() = application {
                 Column(
                     modifier = Modifier.fillMaxSize(),
                 ) {
-                    Row(modifier = Modifier.fillMaxWidth().height(32.dp).background(Color(0x28, 0x28, 0x28))) {
-                        Column(verticalArrangement = Arrangement.Center, modifier = Modifier.fillMaxSize()) {
-                            Row(horizontalArrangement = Arrangement.SpaceAround, modifier = Modifier.fillMaxSize()) {
-                                Row(horizontalArrangement = Arrangement.Start, modifier = Modifier.weight(1f)) {
-                                    WindowDraggableArea(
-                                        modifier = Modifier.fillMaxSize()
-                                            .pointerInput(interactionSource) {
-                                                detectTapGestures(
-                                                    onDoubleTap = {
-                                                        windowState.placement =
-                                                            if (windowState.placement == WindowPlacement.Maximized)
-                                                                WindowPlacement.Floating else WindowPlacement.Maximized
-                                                    }
-                                                )
-                                            },
-                                    ) {
-                                        Text(
-                                            "FRP Client GUI",
-                                            fontSize = 13.sp,
-                                            modifier = Modifier.padding(start = 12.dp).offset(y = 1.dp)
-                                        )
-                                    }
-                                }
-
-                                Row(
-                                    horizontalArrangement = Arrangement.Start,
-                                    modifier = Modifier.wrapContentWidth().fillMaxHeight()
-                                ) {
-                                    Column(
-                                        verticalArrangement = Arrangement.Center,
-                                        modifier = Modifier.fillMaxHeight()
-                                    ) {
-                                        SmallIconButton(
-                                            onClick = {
-//                                                windowState.isMinimized = true
-                                            },
-                                            modifier = Modifier.size(18.dp).offset(y = (-1).dp),
-//                                        colors = ButtonDefaults.textButtonColors(
-//                                            contentColor = MaterialTheme.colors.onSurface,
-//                                        ),
-//                                        shape = RectangleShape
-                                        ) {
-                                            Icon(Icons.Filled.Settings, "Settings", tint = Color(0x75, 0x75, 0x75))
-                                        }
-                                    }
-
-                                    Box(modifier = Modifier.padding(18.dp, 4.dp, 8.dp, 4.dp)) {
-                                        Divider(
-                                            modifier = Modifier
-                                                .fillMaxHeight()
-                                                .width(1.dp)
-                                        )
-                                    }
-
-                                    TextButton(
-                                        onClick = {
-                                            windowState.isMinimized = true
-                                        },
-                                        modifier = Modifier.width(47.dp),
-                                        colors = ButtonDefaults.textButtonColors(
-                                            contentColor = MaterialTheme.colors.onSurface,
-                                        ),
-                                        shape = RectangleShape
-                                    ) {
-                                        Icon(Icons.Filled.HorizontalRule, "Minimize")
-                                    }
-
-                                    TextButton(
-                                        onClick = {
-                                            windowState.placement =
-                                                if (windowState.placement == WindowPlacement.Maximized)
-                                                    WindowPlacement.Floating else WindowPlacement.Maximized
-                                        },
-                                        modifier = Modifier.width(47.dp),
-                                        colors = ButtonDefaults.textButtonColors(
-                                            contentColor = MaterialTheme.colors.onSurface,
-                                        ),
-                                        shape = RectangleShape
-                                    ) {
-                                        Icon(Icons.Filled.CropSquare, "Maximize", modifier = Modifier.size(13.dp))
-                                    }
-
-                                    TextButton(
-                                        onClick = ::exitApplication,
-                                        modifier = Modifier.width(47.dp),
-                                        colors = ButtonDefaults.textButtonColors(
-                                            contentColor = MaterialTheme.colors.onSurface,
-                                        ),
-                                        shape = RectangleShape
-                                    ) {
-                                        Icon(Icons.Filled.Close, "Close")
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    WindowTitle(windowState)
 
                     Column(
                         modifier = Modifier.fillMaxSize()
