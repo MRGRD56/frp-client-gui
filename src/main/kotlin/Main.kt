@@ -5,14 +5,13 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.window.WindowDraggableArea
 import androidx.compose.material.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.*
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
@@ -22,11 +21,15 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.*
+import component.common.SmallIconButton
+import frp.Frp
 import model.ExposableApp
 import model.RuntimeExposablePort
+import modifier.border
 import java.awt.Desktop
 import java.net.URI
 
@@ -65,15 +68,36 @@ fun App() {
         )
     }
 
-    Row(modifier = Modifier.fillMaxSize()) {
+    var selectedExposablePort by remember { mutableStateOf<RuntimeExposablePort?>(null) }
+
+    Row(
+        modifier = Modifier.fillMaxSize()
+            .border(color = Color(0x28, 0x28, 0x28), start = 2.dp, bottom = 2.dp, end = 2.dp)
+    ) {
         Column(
-            modifier = Modifier.fillMaxHeight().widthIn(max = 350.dp).padding(8.dp),
+            modifier = Modifier
+                .fillMaxHeight()
+                .padding(8.dp)
+                .let {
+                    if (selectedExposablePort == null) {
+                        it
+                    } else {
+                        it.widthIn(max = 350.dp)
+                    }
+                }
+            ,
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             exposablePorts.forEachIndexed { index, exposablePort ->
-                Card(modifier = Modifier.fillMaxWidth(), onClick = {
+                val isSelected = selectedExposablePort == exposablePort
 
-                }) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = {
+                        selectedExposablePort = if (isSelected) null else exposablePort
+                    },
+                    backgroundColor = if (isSelected) Color(0x27, 0x27, 0x27) else MaterialTheme.colors.surface
+                ) {
                     Row(Modifier.fillMaxWidth()) {
                         Column(Modifier.padding(12.dp, 8.dp).weight(1f)) {
                             Row {
@@ -104,7 +128,7 @@ fun App() {
                                         }
                                     }
                                 ) {
-                                    if (exposablePort.isRunning.value)
+                                    if (exposablePort.isRunning)
                                         Text(
                                             exposablePort.app.name,
                                             modifier = Modifier.padding(
@@ -132,9 +156,9 @@ fun App() {
                                             .browse(URI(exposablePort.app.getFullUrl("tun.kiriru.su", "https")))
                                     },
                                     modifier = Modifier.size(18.dp),
-                                    enabled = exposablePort.isRunning.value
+                                    enabled = exposablePort.isRunning
                                 ) {
-                                    if (exposablePort.isRunning.value)
+                                    if (exposablePort.isRunning)
                                         Icon(
                                             Icons.AutoMirrored.Filled.OpenInNew,
                                             "Open in browser",
@@ -147,9 +171,9 @@ fun App() {
                         }
                         Column(Modifier.padding(end = 2.dp, top = 2.dp)) {
                             IconButton(onClick = {
-                                exposablePort.isRunning.value = !exposablePort.isRunning.value
+                                exposablePort.isRunning = !exposablePort.isRunning
                             }) {
-                                if (exposablePort.isRunning.value) {
+                                if (exposablePort.isRunning) {
                                     Icon(Icons.Filled.Stop, "Stop")
                                 } else {
                                     Icon(Icons.Filled.PlayArrow, "Start")
@@ -161,58 +185,155 @@ fun App() {
             }
         }
 
-        Box(modifier = Modifier.fillMaxHeight().padding(vertical = 8.dp)) {
-            Divider(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .width(1.dp)
-            )
-        }
+        selectedExposablePort?.let { currentApp ->
 
-        Column(modifier = Modifier.fillMaxHeight().weight(0.6f)) {
-            Row(modifier = Modifier.weight(0.7f)) {
-
-            }
-
-            Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)) {
+            Box(modifier = Modifier.fillMaxHeight().padding(vertical = 8.dp)) {
                 Divider(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .height(1.dp)
+                        .fillMaxHeight()
+                        .width(1.dp)
                 )
             }
 
-            Row(
-                modifier = Modifier.weight(0.3f).padding(8.dp)
-                    .border(1.dp, Color(0x29, 0x29, 0x29), shape = MaterialTheme.shapes.small)
-            ) {
-                Box(modifier = Modifier.fillMaxSize().background(Color(0x17, 0x17, 0x17))) {
-                    BasicTextField(
-                        value = """
+            Column(modifier = Modifier.fillMaxHeight().weight(0.6f).padding(8.dp)) {
+                Row(modifier = Modifier.weight(0.7f)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row {
+                            TextField(
+                                value = currentApp.app.name,
+                                onValueChange = {
+                                    currentApp.app.isCustomName = true
+                                    currentApp.app.name = it
+                                },
+                                label = { Text("Name") }
+                            )
+                        }
+                        Row {
+                            var expanded by remember { mutableStateOf(false) }
+
+                            ExposedDropdownMenuBox(
+                                expanded = expanded,
+                                onExpandedChange = {
+                                    expanded = !expanded
+                                }
+                            ) {
+                                TextField(
+                                    readOnly = true,
+                                    value = currentApp.app.protocol,
+                                    onValueChange = { },
+                                    label = { Text("Protocol") },
+                                    trailingIcon = {
+                                        ExposedDropdownMenuDefaults.TrailingIcon(
+                                            expanded = expanded
+                                        )
+                                    },
+                                    colors = ExposedDropdownMenuDefaults.textFieldColors()
+                                )
+                                ExposedDropdownMenu(
+                                    expanded = expanded,
+                                    onDismissRequest = {
+                                        expanded = false
+                                    }
+                                ) {
+                                    Frp.availableProtocols.forEach { selectionOption ->
+                                        DropdownMenuItem(
+                                            onClick = {
+                                                currentApp.app.protocol = selectionOption
+                                                expanded = false
+                                            }
+                                        ) {
+                                            Text(text = selectionOption)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        Row {
+                            TextField(
+                                keyboardOptions = KeyboardOptions.Default.copy(keyboardType = KeyboardType.Decimal),
+                                value = currentApp.app.localAddress,
+                                onValueChange = { currentApp.app.localAddress = it },
+                                label = { Text("Local Address") }
+                            )
+                        }
+                        Row {
+                            TextField(
+                                keyboardOptions = KeyboardOptions.Default.copy(keyboardType = KeyboardType.Number),
+                                value = currentApp.app.localPort?.toString() ?: "",
+                                onValueChange = {
+                                    if (it.isBlank()) {
+                                        currentApp.app.localPort = null
+                                        return@TextField
+                                    }
+
+                                    currentApp.app.localPort = it.toIntOrNull() ?: currentApp.app.localPort
+                                },
+                                label = { Text("Local Port") }
+                            )
+                        }
+                        Row {
+                            TextField(
+                                keyboardOptions = KeyboardOptions.Default.copy(keyboardType = KeyboardType.Decimal),
+                                value = currentApp.app.subdomain,
+                                onValueChange = {
+                                    currentApp.app.subdomain = it
+                                    if (!currentApp.app.isCustomName) {
+                                        currentApp.app.name = currentApp.app.getAutogeneratedName()
+                                    }
+                                },
+                                label = { Text("Subdomain") }
+                            )
+                        }
+                    }
+                }
+
+                if (currentApp.isRunning) {
+                    Box(modifier = Modifier.fillMaxWidth()) {
+                        Divider(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(1.dp)
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.weight(0.3f).padding(top = 8.dp)
+                            .border(1.dp, Color(0x29, 0x29, 0x29), shape = MaterialTheme.shapes.small)
+                    ) {
+                        Box(modifier = Modifier.fillMaxSize().background(Color(0x17, 0x17, 0x17))) {
+                            BasicTextField(
+                                value = """
                             2024/06/28 01:00:53 [I] [root.go:139] start frpc service for config file [C:\_public\frp_0.52.3_windows_amd64\frpc.toml]
                             2024/06/28 01:00:53 [I] [service.go:299] [d1eb514d62903016] login to server success, get run id [d1eb514d62903016]
                             2024/06/28 01:00:53 [I] [proxy_manager.go:156] [d1eb514d62903016] proxy added: [http-broadcastbot]
                             2024/06/28 01:00:53 [I] [control.go:173] [d1eb514d62903016] [http-broadcastbot] start proxy success
                         """.trimIndent(),
-                        onValueChange = {},
-                        readOnly = true,
-                        textStyle = TextStyle(
-                            fontFamily = FontFamily("JetBrains Mono"),
-                            fontSize = 11.sp,
-                            color = MaterialTheme.colors.onBackground,
-                        ),
+                                onValueChange = {},
+                                readOnly = true,
+                                textStyle = TextStyle(
+                                    fontFamily = FontFamily("JetBrains Mono"),
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colors.onBackground,
+                                ),
 //                colors = TextFieldDefaults.textFieldColors(
 //                    backgroundColor = Color(0x17, 0x17, 0x17),
 //                    focusedIndicatorColor = Color.Transparent,
 //                    unfocusedIndicatorColor = Color.Transparent,
 //                    disabledIndicatorColor = Color.Transparent
 //                ),
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 10.dp, vertical = 4.dp) //TODO fix the paddings
+                                modifier = Modifier
+                                    .fillMaxSize(), //TODO fix the paddings
+                                decorationBox = { innerTextField ->
+                                    Box(modifier = Modifier.fillMaxSize().padding(horizontal = 10.dp, vertical = 4.dp)) {
+                                        innerTextField()
+                                    }
+//                            VerticalScrollbar(adapter = rememberScrollbarAdapter(rememberScrollState(0)))
+                                }
 //                shape = MaterialTheme.shapes.small,
-                    )
+                            )
 //                    VerticalScrollbar(adapter = rememberScrollbarAdapter(rememberScrollState(0)))
+                        }
+                    }
                 }
             }
         }
@@ -229,7 +350,9 @@ fun App() {
 
 fun main() = application {
     val windowState = rememberWindowState(
-        position = WindowPosition(Alignment.Center)
+        position = WindowPosition(Alignment.Center),
+        width = 1000.dp,
+        height = 700.dp
     )
 
     val interactionSource = remember { MutableInteractionSource() }
@@ -283,11 +406,11 @@ fun main() = application {
                                         verticalArrangement = Arrangement.Center,
                                         modifier = Modifier.fillMaxHeight()
                                     ) {
-                                        IconButton(
+                                        SmallIconButton(
                                             onClick = {
-                                                windowState.isMinimized = true
+//                                                windowState.isMinimized = true
                                             },
-                                            modifier = Modifier.size(18.dp).offset(y = (-2).dp),
+                                            modifier = Modifier.size(18.dp).offset(y = (-1).dp),
 //                                        colors = ButtonDefaults.textButtonColors(
 //                                            contentColor = MaterialTheme.colors.onSurface,
 //                                        ),
@@ -297,7 +420,7 @@ fun main() = application {
                                         }
                                     }
 
-                                    Box(modifier = Modifier.padding(24.dp, 4.dp, 8.dp, 4.dp)) {
+                                    Box(modifier = Modifier.padding(18.dp, 4.dp, 8.dp, 4.dp)) {
                                         Divider(
                                             modifier = Modifier
                                                 .fillMaxHeight()
