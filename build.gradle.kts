@@ -1,4 +1,3 @@
-import org.gradle.kotlin.dsl.support.kotlinCompilerOptions
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 
 plugins {
@@ -29,6 +28,7 @@ dependencies {
     implementation("org.jetbrains.exposed:exposed-dao:0.52.0")
     implementation("org.jetbrains.exposed:exposed-jdbc:0.52.0")
     implementation("org.jetbrains.exposed:exposed-java-time:0.52.0")
+    implementation("org.slf4j:slf4j-api:2.0.13")
     implementation("org.xerial:sqlite-jdbc:3.46.0.0")
     implementation("org.jetbrains.kotlin", "kotlin-reflect", "2.0.0")
 }
@@ -38,9 +38,16 @@ compose.desktop {
         mainClass = "MainKt"
 
         nativeDistributions {
-            targetFormats(TargetFormat.Msi, TargetFormat.Deb)
+            targetFormats(TargetFormat.Exe, TargetFormat.Deb)
             packageName = "frp-client-gui"
             packageVersion = "1.0.0"
+
+            modules("java.sql")
+
+            windows {
+                exePackageVersion = "1.0.0"
+                iconFile.set(project.file("src/main/resources/frpc-gui.ico"))
+            }
         }
     }
 }

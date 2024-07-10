@@ -9,6 +9,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.ExperimentalTextApi
@@ -16,18 +18,16 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import model.RuntimeExposablePort
 
 @OptIn(ExperimentalTextApi::class)
 @Composable
-fun ExposedAppLogs() {
+fun ExposedAppLogs(app: RuntimeExposablePort) {
+    val bufferState by app.logs.state.collectAsState()
+
     Box(modifier = Modifier.fillMaxSize().background(Color(0x17, 0x17, 0x17))) {
         BasicTextField(
-            value = """
-                            2024/06/28 01:00:53 [I] [root.go:139] start frpc service for config file [C:\_public\frp_0.52.3_windows_amd64\frpc.toml]
-                            2024/06/28 01:00:53 [I] [service.go:299] [d1eb514d62903016] login to server success, get run id [d1eb514d62903016]
-                            2024/06/28 01:00:53 [I] [proxy_manager.go:156] [d1eb514d62903016] proxy added: [http-broadcastbot]
-                            2024/06/28 01:00:53 [I] [control.go:173] [d1eb514d62903016] [http-broadcastbot] start proxy success
-                        """.trimIndent(),
+            value = bufferState,
             onValueChange = {},
             readOnly = true,
             textStyle = TextStyle(

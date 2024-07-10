@@ -1,7 +1,5 @@
 import androidx.compose.desktop.ui.tooling.preview.Preview
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.TooltipArea
-import androidx.compose.foundation.border
+import androidx.compose.foundation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -17,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.layout
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.IntOffset
@@ -30,10 +29,13 @@ import component.window.WindowTitle
 import entity.ExposableAppEntity
 import frp.Frp
 import model.ExposableApp
+import model.RuntimeAppStatus
 import model.RuntimeExposablePort
 import modifier.border
 import org.jetbrains.exposed.sql.Database
 import org.jetbrains.exposed.sql.SchemaUtils
+import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
+import org.jetbrains.exposed.sql.deleteWhere
 import org.jetbrains.exposed.sql.transactions.transaction
 import table.ExposableApps
 import java.awt.Desktop
@@ -77,6 +79,14 @@ fun App() {
         }
     }
 
+    DisposableEffect(Unit) {
+        onDispose {
+            exposablePorts.forEach {
+                if (it.isRunning) it.stop()
+            }
+        }
+    }
+
 //    val exposablePorts = remember {
 //        mutableStateListOf<RuntimeExposablePort>(
 //            RuntimeExposablePort(
@@ -116,6 +126,52 @@ fun App() {
         modifier = Modifier.fillMaxSize()
             .border(color = Color(0x28, 0x28, 0x28), start = 2.dp, bottom = 2.dp, end = 2.dp)
     ) {
+        var appToDelete by remember { mutableStateOf<RuntimeExposablePort?>(null) }
+
+        appToDelete?.let { app ->
+            AlertDialog(
+                title = {
+                    Text("Delete app")
+                },
+                text = {
+                    Text("Are you sure you want to delete the app \"${app.app.name.ifEmpty { "<unnamed>" }}\"?")
+                },
+                onDismissRequest = {
+                    appToDelete = null
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            if (app.isRunning) {
+                                app.stop()
+                            }
+
+                            transaction {
+                                ExposableApps.deleteWhere { this.id eq app.app.id }
+                            }
+
+                            exposablePorts.remove(app)
+                            selectedExposablePort = null
+
+                            appToDelete = null
+                        },
+                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colors.error)
+                    ) {
+                        Text("Delete")
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            appToDelete = null
+                        }
+                    ) {
+                        Text("Dismiss")
+                    }
+                }
+            )
+        }
+
         Box(
             modifier = Modifier
                 .fillMaxHeight()
@@ -125,101 +181,131 @@ fun App() {
                     widthIn(max = 350.dp)
                 }
         ) {
+            val leftScroll = rememberScrollState()
+
             Column(
                 modifier = Modifier
                     .fillMaxHeight()
-                    .padding(8.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                exposablePorts.forEachIndexed { index, exposablePort ->
-                    val isSelected = selectedExposablePort == exposablePort
+                Column(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .verticalScroll(leftScroll)
+                        .weight(weight = 1f, fill = false)
+                        .padding(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    exposablePorts.forEachIndexed { index, exposablePort ->
+                        val isSelected = selectedExposablePort == exposablePort
 
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        onClick = {
-                            selectedExposablePort = if (isSelected) null else exposablePort
-                        },
-                        backgroundColor = if (isSelected) Color(0x27, 0x27, 0x27) else MaterialTheme.colors.surface
-                    ) {
-                        Row(Modifier.fillMaxWidth()) {
-                            Column(Modifier.padding(12.dp, 8.dp).weight(1f)) {
-                                Row {
-                                    Text(
-                                        exposablePort.app.protocol,
-                                        style = MaterialTheme.typography.h6,
-                                        color = MaterialTheme.colors.primary,
-                                        modifier = Modifier.padding(start = 6.dp, top = 4.dp, end = 5.dp, bottom = 4.dp)
-                                    )
-                                    Text(
-                                        exposablePort.app.formatShortLocalSocket() ?: "",
-                                        style = MaterialTheme.typography.h6,
-                                        color = MaterialTheme.colors.primaryVariant,
-                                        modifier = Modifier.padding(start = 5.dp, top = 4.dp, end = 6.dp, bottom = 4.dp)
-                                    )
-                                }
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    TooltipArea(
-                                        tooltip = {
-                                            Surface(
-                                                modifier = Modifier.shadow(4.dp),
-                                                shape = RoundedCornerShape(4.dp)
-                                            ) {
-                                                Text(
-                                                    text = exposablePort.app.getFullDomain("tun.kiriru.su") ?: "",
-                                                    modifier = Modifier.padding(10.dp)
-                                                )
-                                            }
-                                        }
-                                    ) {
-                                        if (exposablePort.isRunning)
-                                            Text(
-                                                exposablePort.app.name,
-                                                modifier = Modifier.padding(
-                                                    start = 6.dp,
-                                                    top = 4.dp,
-                                                    end = 10.dp,
-                                                    bottom = 4.dp
-                                                ),
-                                                color = Color(0x43, 0xa0, 0x47)
-                                            )
-                                        else
-                                            Text(
-                                                exposablePort.app.name,
-                                                modifier = Modifier.padding(
-                                                    start = 6.dp,
-                                                    top = 4.dp,
-                                                    end = 10.dp,
-                                                    bottom = 4.dp
-                                                )
-                                            )
-                                    }
-                                    IconButton(
-                                        onClick = {
-                                            Desktop.getDesktop()
-                                                .browse(URI(exposablePort.app.getFullUrl("tun.kiriru.su", "https")))
-                                        },
-                                        modifier = Modifier.size(18.dp),
-                                        enabled = exposablePort.isRunning
-                                    ) {
-                                        if (exposablePort.isRunning)
-                                            Icon(
-                                                Icons.AutoMirrored.Filled.OpenInNew,
-                                                "Open in browser",
-                                                tint = Color(0x43, 0xa0, 0x47)
-                                            )
-                                        else
-                                            Icon(Icons.AutoMirrored.Filled.OpenInNew, "Open in browser")
-                                    }
-                                }
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            onClick = {
+                                selectedExposablePort = if (isSelected) null else exposablePort
+                            },
+                            backgroundColor = if (isSelected) Color(0x27, 0x27, 0x27) else MaterialTheme.colors.surface
+                        ) {
+                            val statusColor: Color? = when (exposablePort.status) {
+                                RuntimeAppStatus.STOPPED -> null
+                                RuntimeAppStatus.STARTING -> Color(0xfd, 0xd8, 0x35)
+                                RuntimeAppStatus.SUCCESS -> Color(0x43, 0xa0, 0x47)
+                                RuntimeAppStatus.FAILED -> Color(0xe5, 0x39, 0x35)
                             }
-                            Column(Modifier.padding(end = 2.dp, top = 2.dp)) {
-                                IconButton(onClick = {
-                                    exposablePort.isRunning = !exposablePort.isRunning
-                                }) {
-                                    if (exposablePort.isRunning) {
-                                        Icon(Icons.Filled.Stop, "Stop")
-                                    } else {
-                                        Icon(Icons.Filled.PlayArrow, "Start")
+
+                            Row(Modifier.fillMaxWidth()) {
+                                Column(Modifier.padding(12.dp, 8.dp).weight(1f)) {
+                                    Row {
+                                        Text(
+                                            exposablePort.app.protocol,
+                                            style = MaterialTheme.typography.h6,
+                                            color = MaterialTheme.colors.primary,
+                                            modifier = Modifier.padding(
+                                                start = 6.dp,
+                                                top = 4.dp,
+                                                end = 5.dp,
+                                                bottom = 4.dp
+                                            )
+                                        )
+                                        Text(
+                                            exposablePort.app.formatShortLocalSocket() ?: "",
+                                            style = MaterialTheme.typography.h6,
+                                            color = MaterialTheme.colors.primaryVariant,
+                                            modifier = Modifier.padding(
+                                                start = 5.dp,
+                                                top = 4.dp,
+                                                end = 6.dp,
+                                                bottom = 4.dp
+                                            )
+                                        )
+                                    }
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        TooltipArea(
+                                            tooltip = {
+                                                Surface(
+                                                    modifier = Modifier.shadow(4.dp),
+                                                    shape = RoundedCornerShape(4.dp)
+                                                ) {
+                                                    Text(
+                                                        text = exposablePort.app.getFullDomain("tun.kiriru.su") ?: "",
+                                                        modifier = Modifier.padding(10.dp)
+                                                    )
+                                                }
+                                            }
+                                        ) {
+                                            if (statusColor != null)
+                                                Text(
+                                                    exposablePort.app.name,
+                                                    modifier = Modifier.padding(
+                                                        start = 6.dp,
+                                                        top = 4.dp,
+                                                        end = 10.dp,
+                                                        bottom = 4.dp
+                                                    ),
+                                                    color = statusColor
+                                                )
+                                            else
+                                                Text(
+                                                    exposablePort.app.name,
+                                                    modifier = Modifier.padding(
+                                                        start = 6.dp,
+                                                        top = 4.dp,
+                                                        end = 10.dp,
+                                                        bottom = 4.dp
+                                                    )
+                                                )
+                                        }
+                                        IconButton(
+                                            onClick = {
+                                                Desktop.getDesktop()
+                                                    .browse(URI(exposablePort.app.getFullUrl("tun.kiriru.su", "https")))
+                                            },
+                                            modifier = Modifier.size(18.dp),
+                                            enabled = exposablePort.isRunning
+                                        ) {
+                                            if (statusColor != null)
+                                                Icon(
+                                                    Icons.AutoMirrored.Filled.OpenInNew,
+                                                    "Open in browser",
+                                                    tint = statusColor
+                                                )
+                                            else
+                                                Icon(Icons.AutoMirrored.Filled.OpenInNew, "Open in browser")
+                                        }
+                                    }
+                                }
+                                Column(Modifier.padding(end = 2.dp, top = 2.dp)) {
+                                    IconButton(onClick = {
+                                        if (exposablePort.isRunning) {
+                                            exposablePort.stop()
+                                        } else {
+                                            exposablePort.start()
+                                        }
+                                    }) {
+                                        if (exposablePort.isRunning) {
+                                            Icon(Icons.Filled.Stop, "Stop")
+                                        } else {
+                                            Icon(Icons.Filled.PlayArrow, "Start")
+                                        }
                                     }
                                 }
                             }
@@ -228,11 +314,22 @@ fun App() {
                 }
             }
 
+            VerticalScrollbar(
+                modifier = Modifier.align(Alignment.CenterEnd)
+                    .fillMaxHeight(),
+                adapter = rememberScrollbarAdapter(leftScroll)
+            )
+
             ExtendedFloatingActionButton(
                 modifier = Modifier.layout { measurable, constraints ->
                     val placeable = measurable.measure(constraints)
                     layout(placeable.width, placeable.height) {
-                        placeable.placeRelative(IntOffset(constraints.maxWidth - placeable.width - 24, constraints.maxHeight - placeable.height - 24))
+                        placeable.placeRelative(
+                            IntOffset(
+                                constraints.maxWidth - placeable.width - 24,
+                                constraints.maxHeight - placeable.height - 24
+                            )
+                        )
                     }
                 },
                 onClick = {
@@ -352,6 +449,21 @@ fun App() {
                                 label = { Text("Subdomain") }
                             )
                         }
+                        Row(
+                            modifier = Modifier.padding(top = 8.dp)
+                        ) {
+                            Button(
+                                onClick = {
+                                    appToDelete = currentApp
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    contentColor = MaterialTheme.colors.onError,
+                                    backgroundColor = MaterialTheme.colors.error
+                                )
+                            ) {
+                                Text("Delete")
+                            }
+                        }
                     }
                 }
 
@@ -368,7 +480,7 @@ fun App() {
                         modifier = Modifier.weight(0.3f).padding(top = 8.dp)
                             .border(1.dp, Color(0x29, 0x29, 0x29), shape = MaterialTheme.shapes.small)
                     ) {
-                        ExposedAppLogs()
+                        ExposedAppLogs(currentApp)
                     }
                 }
             }
@@ -394,7 +506,9 @@ fun main() = application {
     Window(
         onCloseRequest = ::exitApplication,
         undecorated = true,
-        state = windowState
+        state = windowState,
+        title = "FRP Client GUI",
+        icon = painterResource("frpc-gui.ico")
     ) {
 
         MaterialTheme(
